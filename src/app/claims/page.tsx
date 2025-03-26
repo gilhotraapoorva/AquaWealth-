@@ -1,35 +1,48 @@
 "use client";
 
 import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, SubmitHandler } from "react-hook-form";
 import { motion } from "framer-motion";
 import { submitClaim } from "@/lib/api";
 
+type ClaimFormInputs = {
+  governmentId: string;
+  city: string;
+  date: string;
+  claimAmount: number;
+};
+
 export default function ClaimsPage() {
-  const { register, handleSubmit, formState: { errors } } = useForm({
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+    reset,
+  } = useForm<ClaimFormInputs>({
     defaultValues: {
       governmentId: "",
       city: "",
       date: new Date().toISOString().split("T")[0],
-      claimAmount: "",
+      claimAmount: 0,
     },
   });
 
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState("");
 
-  const onSubmit = async (data) => {
+  const onSubmit: SubmitHandler<ClaimFormInputs> = async (data) => {
     setError("");
     try {
       await submitClaim({
-        governmentId: data.governmentId,
-        city: data.city,
-        date: data.date,
-        claimAmount: parseFloat(data.claimAmount),
+        ...data,
+        claimAmount: parseFloat(String(data.claimAmount)), // Ensure conversion
       });
       setSubmitted(true);
+      reset();
     } catch (err) {
-      setError(err.message || "Failed to submit claim. Please try again.");
+      setError(
+        err instanceof Error ? err.message : "Failed to submit claim. Please try again."
+      );
     }
   };
 
@@ -60,15 +73,23 @@ export default function ClaimsPage() {
           </div>
         ) : (
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-            {[{ label: "Government ID", name: "governmentId" }, { label: "City", name: "city" }].map(({ label, name }) => (
+            {[
+              { label: "Government ID", name: "governmentId", type: "text" },
+              { label: "City", name: "city", type: "text" },
+            ].map(({ label, name, type }) => (
               <div key={name}>
                 <label className="block mb-2 text-green-200 font-semibold text-lg">{label}</label>
                 <input
-                  type="text"
+                  type={type}
+                  {...register(name as keyof ClaimFormInputs, {
+                    required: `${label} is required`,
+                  })}
                   className="w-full rounded-xl bg-blue-800/50 text-white px-4 py-3 border border-green-500/40 focus:ring-2 focus:ring-green-400 focus:outline-none backdrop-blur-lg shadow-md"
-                  {...register(name, { required: `${label} is required` })}
+                  aria-invalid={!!errors[name as keyof ClaimFormInputs]}
                 />
-                {errors[name] && <p className="text-red-400">{errors[name]?.message}</p>}
+                {errors[name as keyof ClaimFormInputs] && (
+                  <p className="text-red-400">{errors[name as keyof ClaimFormInputs]?.message}</p>
+                )}
               </div>
             ))}
 
@@ -76,9 +97,11 @@ export default function ClaimsPage() {
               <label className="block mb-2 text-green-200 font-semibold text-lg">Claim Date</label>
               <input
                 type="date"
-                className="w-full rounded-xl bg-blue-800/50 text-white px-4 py-3 border border-green-500/40 focus:ring-2 focus:ring-green-400 focus:outline-none backdrop-blur-lg shadow-md"
+                min={new Date().toISOString().split("T")[0]} // Prevent past dates
                 {...register("date", { required: "Date is required" })}
+                className="w-full rounded-xl bg-blue-800/50 text-white px-4 py-3 border border-green-500/40 focus:ring-2 focus:ring-green-400 focus:outline-none backdrop-blur-lg shadow-md"
               />
+              {errors.date && <p className="text-red-400">{errors.date?.message}</p>}
             </div>
 
             <div>
@@ -86,9 +109,14 @@ export default function ClaimsPage() {
               <input
                 type="number"
                 step="0.01"
+                min="0.1"
+                {...register("claimAmount", {
+                  required: "Claim amount is required",
+                  min: { value: 0.1, message: "Amount must be at least 0.1" },
+                })}
                 className="w-full rounded-xl bg-blue-800/50 text-white px-4 py-3 border border-green-500/40 focus:ring-2 focus:ring-green-400 focus:outline-none backdrop-blur-lg shadow-md"
-                {...register("claimAmount", { required: "Claim amount is required", min: 0.1 })}
               />
+              {errors.claimAmount && <p className="text-red-400">{errors.claimAmount?.message}</p>}
             </div>
 
             <motion.button
